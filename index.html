@@ -3,176 +3,118 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nexus Dash - Live Sync</title>
-    <!-- Tailwind CSS -->
+    <title>Nexus Dashboard - Live Sync</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=JetBrains+Mono&display=swap" rel="stylesheet">
-    <!-- Scripts Necessários -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
-    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
     <script src="https://unpkg.com/papaparse/papaparse.min.js"></script>
-
     <style>
-        body { font-family: 'Inter', sans-serif; background: #050505; color: white; margin: 0; overflow: hidden; }
-        .nexus-gradient { background: radial-gradient(circle at top right, #1a1a1a, #050505); height: 100vh; width: 100vw; }
-        .glow-orange { filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.4)); }
+        body { font-family: 'Inter', sans-serif; background: #050505; color: white; margin: 0; overflow-x: hidden; }
+        .nexus-gradient { background: radial-gradient(circle at top right, #1a1a1a, #050505); min-height: 100vh; }
         .glass-panel { background: rgba(15, 15, 15, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.05); }
-        @keyframes pulse-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
-        .animate-pulse-slow { animation: pulse-slow 3s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .animate-pulse-slow { animation: pulse 3s infinite; }
     </style>
 </head>
 <body>
     <div id="root"></div>
-
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
-        const { 
-            LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip: RechartsTooltip, ResponsiveContainer,
-            AreaChart, Area 
-        } = Recharts;
-        const { motion, AnimatePresence } = FramerMotion;
-
-        // --- CONFIGURAÇÃO DA PLANILHA ---
         const SHEET_ID = "1qTS_qgn9WP4kuhdNMH6xl2Vk1uAFePDx9QWYTZCF6-0";
         const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0`;
 
         const App = () => {
             const [vendedores, setVendedores] = useState([
-                { id: '1', name: 'Carregando...', faturamento: 0, vendas: 0, meta: 100000, tendencia: 'up', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' },
-                { id: '2', name: 'Carregando...', faturamento: 0, vendas: 0, meta: 100000, tendencia: 'up', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150' },
-                { id: '3', name: 'Carregando...', faturamento: 0, vendas: 0, meta: 100000, tendencia: 'up', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150' },
+                { id: '1', name: 'Top 1', faturamento: 0, avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100' },
+                { id: '2', name: 'Top 2', faturamento: 0, avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100' },
+                { id: '3', name: 'Top 3', faturamento: 0, avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100' },
             ]);
-            const [monthlyGoal, setMonthlyGoal] = useState(1000000);
+            const [meta, setMeta] = useState(1000000);
             const [lastUpdate, setLastUpdate] = useState('--:--:--');
+            const [error, setError] = useState(null);
 
             const totalRevenue = useMemo(() => vendedores.reduce((acc, v) => acc + v.faturamento, 0), [vendedores]);
-            const progressPercentage = useMemo(() => Math.min((totalRevenue / monthlyGoal) * 100, 100), [totalRevenue, monthlyGoal]);
+            const porcentagem = useMemo(() => Math.min((totalRevenue / meta) * 100, 100), [totalRevenue, meta]);
 
             const parseMoney = (val) => {
                 if (!val) return 0;
                 const clean = String(val).replace(/[^\d]/g, "");
-                return parseFloat(clean) / 100 || 0;
+                return (parseFloat(clean) / 100) || 0;
             };
 
-            const fetchData = async () => {
-                try {
-                    const response = await fetch(CSV_URL);
-                    const text = await response.text();
-                    Papa.parse(text, {
-                        complete: (results) => {
-                            const rows = results.data;
-                            if (rows.length >= 3) {
-                                const namesRow = rows[0];
-                                const dataRow = rows[rows.length - 1]; // Pega a última linha (dados mais recentes)
-
-                                // Pega a meta da coluna C (index 2)
-                                setMonthlyGoal(parseMoney(dataRow[2]) || 1000000);
-                                
-                                // Pega faturamento dos vendedores nas colunas F, G, H (índices 5, 6, 7)
-                                setVendedores(prev => prev.map((v, idx) => {
-                                    const colIndex = 5 + idx; 
-                                    return {
-                                        ...v,
-                                        name: namesRow[colIndex] || v.name,
-                                        faturamento: parseMoney(dataRow[colIndex]),
-                                        vendas: Math.floor(parseMoney(dataRow[colIndex]) / 1500)
-                                    };
-                                }));
-                                setLastUpdate(new Date().toLocaleTimeString('pt-BR'));
-                            }
+            const fetchData = () => {
+                Papa.parse(CSV_URL, {
+                    download: true,
+                    header: false,
+                    complete: (results) => {
+                        const rows = results.data;
+                        if (rows && rows.length >= 2) {
+                            const namesRow = rows[0]; 
+                            const dataRow = rows[rows.length - 1]; 
+                            setMeta(parseMoney(dataRow[2]) || 1000000);
+                            setVendedores([
+                                { ...vendedores[0], name: namesRow[5] || 'Top 1', faturamento: parseMoney(dataRow[5]) },
+                                { ...vendedores[1], name: namesRow[6] || 'Top 2', faturamento: parseMoney(dataRow[6]) },
+                                { ...vendedores[2], name: namesRow[7] || 'Top 3', faturamento: parseMoney(dataRow[7]) },
+                            ]);
+                            setLastUpdate(new Date().toLocaleTimeString('pt-BR'));
+                            setError(null);
                         }
-                    });
-                } catch (err) {
-                    console.error("Erro ao sincronizar planilha:", err);
-                }
+                    },
+                    error: () => setError("Erro ao conectar com a planilha.")
+                });
             };
 
             useEffect(() => {
                 fetchData();
-                const interval = setInterval(fetchData, 10000); // Atualiza a cada 10 seg
+                const interval = setInterval(fetchData, 15000);
                 return () => clearInterval(interval);
             }, []);
 
             return (
-                <div className="nexus-gradient p-6 flex flex-col">
-                    {/* Header */}
-                    <div className="flex justify-between items-end mb-8">
+                <div className="nexus-gradient p-4 md:p-8">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 gap-4">
                         <div>
-                            <h1 className="text-4xl font-black tracking-tighter text-white">NEXUS DASHBOARD</h1>
-                            <div className="flex items-center gap-2 mt-1">
+                            <h1 className="text-3xl md:text-5xl font-black tracking-tighter text-white uppercase italic">Nexus Dashboard</h1>
+                            <div className="flex items-center gap-2 mt-2">
                                 <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
-                                <span className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">
-                                    Live Sync Planilha • Atualizado: {lastUpdate}
-                                </span>
+                                <span className="text-[10px] text-gray-500 uppercase font-black tracking-[0.2em]">Live Sync Ativo • {lastUpdate}</span>
                             </div>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-12 gap-6 flex-1">
-                        {/* Esquerda: Métricas Principais */}
-                        <div className="col-span-4 space-y-6">
-                            <div className="glass-panel p-6 rounded-sm">
-                                <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-1">Receita Global</p>
-                                <h2 className="text-5xl font-black text-white tracking-tighter">
-                                    R$ {totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                </h2>
-                                
-                                <div className="mt-8">
-                                    <div className="flex justify-between text-[10px] font-bold mb-2">
-                                        <span className="text-gray-500">PROGRESSO MENSAL</span>
-                                        <span className="text-orange-500">{progressPercentage.toFixed(1)}%</span>
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+                        <div className="md:col-span-4 space-y-6">
+                            <div className="glass-panel p-8 rounded-lg shadow-[0_0_15px_rgba(249,115,22,0.1)]">
+                                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Faturamento Atual</p>
+                                <h2 className="text-4xl md:text-5xl font-black text-white tracking-tighter">R$ {totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+                                <div className="mt-10">
+                                    <div className="flex justify-between text-[10px] font-black mb-2 tracking-widest text-gray-500">
+                                        <span>PROGRESSO MENSAL</span>
+                                        <span className="text-orange-500">{porcentagem.toFixed(1)}%</span>
                                     </div>
-                                    <div className="w-full h-1 bg-white/5">
-                                        <motion.div 
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${progressPercentage}%` }}
-                                            transition={{ duration: 1 }}
-                                            className="h-full bg-orange-500 glow-orange"
-                                        />
+                                    <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                                        <div style={{ width: `${porcentagem}%`, transition: 'width 2s ease-in-out' }} className="h-full bg-orange-500" />
                                     </div>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 text-xs">
-                                <div className="glass-panel p-4 rounded-sm">
-                                    <p className="text-gray-500 font-bold mb-2 uppercase tracking-tighter">Meta Mensal</p>
-                                    <p className="font-mono text-white">R$ {monthlyGoal.toLocaleString('pt-BR')}</p>
-                                </div>
-                                <div className="glass-panel p-4 rounded-sm border-l-2 border-orange-500">
-                                    <p className="text-gray-500 font-bold mb-2 uppercase tracking-tighter">Status</p>
-                                    <p className="text-orange-500 font-black tracking-normal uppercase">Conectado</p>
+                                    <p className="text-[10px] text-gray-500 mt-3 font-bold uppercase">Meta: R$ {meta.toLocaleString('pt-BR')}</p>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Centro: Leaderboard */}
-                        <div className="col-span-8 flex flex-col gap-6">
-                            <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
-                                <span className="w-8 h-[1px] bg-orange-500"></span> 
-                                Leaderboard Time
-                            </h3>
-                            
-                            <div className="grid grid-cols-3 gap-6">
+                        <div className="md:col-span-8">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                                 {vendedores.map((v, i) => (
-                                    <motion.div 
-                                        key={v.id}
-                                        layout
-                                        className="glass-panel p-6 rounded-sm relative overflow-hidden group"
-                                    >
-                                        <div className="relative z-10">
-                                            <span className="text-4xl font-black text-white/10 absolute -top-2 -right-2 tracking-tighter">{i + 1}</span>
-                                            <img src={v.avatar} className="w-12 h-12 rounded-full border-2 border-white/10 mb-4 object-cover" />
-                                            <h4 className="text-lg font-black text-white uppercase truncate">{v.name}</h4>
-                                            <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase">Total Faturado</p>
-                                            <p className="text-xl font-black text-orange-500 mt-1">R$ {v.faturamento.toLocaleString('pt-BR')}</p>
+                                    <div key={i} className="glass-panel p-6 rounded-lg relative overflow-hidden">
+                                        <div className="absolute -top-4 -right-1 text-8xl font-black text-white/5 italic select-none">{i + 1}</div>
+                                        <div className="relative z-10 flex flex-col items-center">
+                                            <img src={v.avatar} className="w-16 h-16 rounded-full border-2 border-white/5 object-cover mb-4" />
+                                            <h4 className="text-lg font-black text-white uppercase italic text-center truncate w-full tracking-tighter">{v.name}</h4>
+                                            <p className="text-[10px] text-gray-500 font-black mb-1 uppercase tracking-widest mt-2">Faturamento</p>
+                                            <p className="text-xl font-black text-orange-500 tracking-tighter">R$ {v.faturamento.toLocaleString('pt-BR')}</p>
                                         </div>
-                                        <div className="absolute bottom-0 left-0 w-full h-1 bg-orange-500/20 group-hover:bg-orange-500 transition-colors"></div>
-                                    </motion.div>
+                                    </div>
                                 ))}
                             </div>
                         </div>
